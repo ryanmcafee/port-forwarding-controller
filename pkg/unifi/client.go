@@ -172,7 +172,7 @@ func (c Client) makeAPICall(method, endpoint string, body []byte) ([]byte, error
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if c.isLoginError(resp) {
 		if err := c.login(); err != nil {
 			return nil, err
@@ -221,7 +221,7 @@ func (c Client) login() error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
 		return c.buildRespErr(resp)
 	}
@@ -231,13 +231,13 @@ func (c Client) login() error {
 
 func (c Client) buildRespErr(resp *http.Response) error {
 	if resp.Body == nil {
-		return fmt.Errorf("Invalid response code %d", resp.StatusCode)
+		return fmt.Errorf("invalid response code %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("Invalid response code %d", resp.StatusCode)
+		return fmt.Errorf("invalid response code %d", resp.StatusCode)
 	}
 
-	return fmt.Errorf("Invalid response code %d: %s", resp.StatusCode, string(body))
+	return fmt.Errorf("invalid response code %d: %s", resp.StatusCode, string(body))
 }

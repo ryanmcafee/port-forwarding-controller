@@ -108,7 +108,7 @@ func (r *ReconcileService) processLB(instance *corev1.Service) (reconcile.Result
 
 	for _, port := range instance.Spec.Ports {
 		addresses = append(addresses, forwarding.Address{
-			Name:        fmt.Sprintf("%s-%s", instance.ObjectMeta.Namespace, instance.Name),
+			Name:        fmt.Sprintf("%s-%s", instance.Namespace, instance.Name),
 			Port:        int(port.Port),
 			IP:          targetIP,
 			SourceRange: sourceRange,
@@ -118,25 +118,25 @@ func (r *ReconcileService) processLB(instance *corev1.Service) (reconcile.Result
 
 	finalizerName := fmt.Sprintf("finalizer.%s/v1", AnnotationPrefix)
 
-	if instance.ObjectMeta.DeletionTimestamp.IsZero() {
+	if instance.DeletionTimestamp.IsZero() {
 		err := r.pfr.CreateAddresses(addresses)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-		if !containsString(instance.ObjectMeta.Finalizers, finalizerName) {
-			instance.ObjectMeta.Finalizers = append(instance.ObjectMeta.Finalizers, finalizerName)
+		if !containsString(instance.Finalizers, finalizerName) {
+			instance.Finalizers = append(instance.Finalizers, finalizerName)
 			if err = r.Update(context.Background(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
 		}
 	} else {
-		if containsString(instance.ObjectMeta.Finalizers, finalizerName) {
+		if containsString(instance.Finalizers, finalizerName) {
 			err := r.pfr.DeleteAddresses(addresses)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
 
-			instance.ObjectMeta.Finalizers = removeString(instance.ObjectMeta.Finalizers, finalizerName)
+			instance.Finalizers = removeString(instance.Finalizers, finalizerName)
 			if err = r.Update(context.Background(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
@@ -147,7 +147,7 @@ func (r *ReconcileService) processLB(instance *corev1.Service) (reconcile.Result
 
 func isAnnotatedLB(instance *corev1.Service) bool {
 	if instance.Spec.Type == "LoadBalancer" || len(instance.Spec.ExternalIPs) > 0 {
-		for key, value := range instance.ObjectMeta.Annotations {
+		for key, value := range instance.Annotations {
 			if key == fmt.Sprintf("%s/enable", AnnotationPrefix) && value == "true" {
 				return true
 			}
@@ -172,7 +172,7 @@ func sourceRangeFromService(svc *corev1.Service) string {
 
 func optionsFromService(svc *corev1.Service) map[string]string {
 	options := map[string]string{}
-	for k, v := range svc.ObjectMeta.Annotations {
+	for k, v := range svc.Annotations {
 		if strings.HasPrefix(k, AnnotationPrefix) && !strings.HasSuffix(k, "/enable") {
 			options[strings.TrimPrefix(k, fmt.Sprintf("%s/", AnnotationPrefix))] = v
 		}

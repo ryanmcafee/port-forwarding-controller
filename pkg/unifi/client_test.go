@@ -33,7 +33,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/api/login" {
 		if _, err := r.Cookie("some-cookie"); err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte(`{"data": [] ,"meta": {"msg": "api.err.LoginRequired", "rc": "error"}}`))
+			_, _ = w.Write([]byte(`{"data": [] ,"meta": {"msg": "api.err.LoginRequired", "rc": "error"}}`))
 			return
 		}
 	}
@@ -54,7 +54,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Name:  "some-cookie",
 			Value: "some-value",
 		})
-		w.Write([]byte(`{"data": [] ,"meta": {"rc": "ok"}}`))
+		_, _ = w.Write([]byte(`{"data": [] ,"meta": {"rc": "ok"}}`))
 	case fmt.Sprintf("/api/s/%s/rest/portforward", s.siteName):
 		switch r.Method {
 		case "GET":
@@ -67,7 +67,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(c.Value).To(Equal("some-value"))
 
-			w.Write([]byte(`{
+			_, _ = w.Write([]byte(`{
 				"data": [
 					{
 						"_id": "5bd919f20889ae0019309113",
@@ -108,9 +108,9 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			s.lastCreateRequestBody, err = io.ReadAll(r.Body)
 			g.Expect(err).NotTo(HaveOccurred())
-			defer r.Body.Close()
+			defer func() { _ = r.Body.Close() }()
 
-			w.Write([]byte(`{}`))
+			_, _ = w.Write([]byte(`{}`))
 		default:
 			s.t.Errorf("unexpected request method %s to %s", r.Method, r.URL.Path)
 		}
@@ -128,7 +128,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			s.deleteCallCount++
 
-			w.Write([]byte(`{}`))
+			_, _ = w.Write([]byte(`{}`))
 		default:
 			s.t.Errorf("unexpected request method %s to %s", r.Method, r.URL.Path)
 		}
@@ -212,7 +212,7 @@ func TestBadLogin(t *testing.T) {
 
 	badLogin := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{ "data": [], "meta" : { "msg": "api.err.SomeError", "rc": "error"}}`))
+		_, _ = w.Write([]byte(`{ "data": [], "meta" : { "msg": "api.err.SomeError", "rc": "error"}}`))
 	})
 	ts := httptest.NewTLSServer(&testServer{t: t, customLoginHandler: badLogin})
 	defer ts.Close()

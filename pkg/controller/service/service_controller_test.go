@@ -55,7 +55,7 @@ func createServiceAndWait(g *GomegaWithT, svc *corev1.Service, requests chan rec
 	}
 	g.Eventually(requests, timeout).Should(Receive(Equal(expectedRequest)))
 	// annotated LBs get a finalizer added which will trigger an update
-	if len(svc.ObjectMeta.Annotations) > 0 {
+	if len(svc.Annotations) > 0 {
 		g.Eventually(requests, timeout).Should(Receive(Equal(expectedRequest)))
 	}
 }
@@ -99,7 +99,7 @@ func TestReconcileWithLoadBalancer(t *testing.T) {
 		},
 	}
 	createServiceAndWait(g, instance, requests)
-	defer c.Delete(context.Background(), instance)
+	defer func() { _ = c.Delete(context.Background(), instance) }()
 
 	// Create may get called a second time after finalizer is added
 	g.Expect(fakePFR.CreateAddressesCallCount()).To(BeNumerically(">=", 1))
@@ -140,7 +140,7 @@ func TestReconcileWithLoadBalancerSourceRange(t *testing.T) {
 		},
 	}
 	createServiceAndWait(g, instance, requests)
-	defer c.Delete(context.Background(), instance)
+	defer func() { _ = c.Delete(context.Background(), instance) }()
 
 	// Create may get called a second time after finalizer is added
 	g.Expect(fakePFR.CreateAddressesCallCount()).To(BeNumerically(">=", 1))
@@ -181,7 +181,7 @@ func TestReconcileWithExternalIP(t *testing.T) {
 		},
 	}
 	createServiceAndWait(g, instance, requests)
-	defer c.Delete(context.Background(), instance)
+	defer func() { _ = c.Delete(context.Background(), instance) }()
 
 	// Create may get called a second time after finalizer is added
 	g.Expect(fakePFR.CreateAddressesCallCount()).To(BeNumerically(">=", 1))
@@ -222,7 +222,7 @@ func TestReconcileWithOptionAnnotations(t *testing.T) {
 		},
 	}
 	createServiceAndWait(g, instance, requests)
-	defer c.Delete(context.Background(), instance)
+	defer func() { _ = c.Delete(context.Background(), instance) }()
 
 	// Create may get called a second time after finalizer is added
 	g.Expect(fakePFR.CreateAddressesCallCount()).To(BeNumerically(">=", 1))
@@ -262,7 +262,7 @@ func TestReconcileWithNoAnnotation(t *testing.T) {
 		},
 	}
 	createServiceAndWait(g, nonAnnotatedInstance, requests)
-	defer c.Delete(context.Background(), nonAnnotatedInstance)
+	defer func() { _ = c.Delete(context.Background(), nonAnnotatedInstance) }()
 
 	g.Expect(fakePFR.CreateAddressesCallCount()).To(Equal(0))
 }
