@@ -26,48 +26,26 @@ archives:
   - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
 
-dockers:
-  - image_templates:
-      - "ghcr.io/ryanmcafee/port-forwarding-controller:{{ .Version }}-amd64"
-    use: buildx
+dockers_v2:
+  - id: port-forwarding-controller
     dockerfile: Dockerfile
-    build_flag_templates:
-      - "--platform=linux/amd64"
-    goos: linux
-    goarch: amd64
-
-  - image_templates:
-      - "ghcr.io/ryanmcafee/port-forwarding-controller:{{ .Version }}-arm64"
-    use: buildx
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - "--platform=linux/arm64"
-    goos: linux
-    goarch: arm64
-
-  - image_templates:
-      - "ghcr.io/ryanmcafee/port-forwarding-controller:{{ .Version }}-armv7"
-    use: buildx
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - "--platform=linux/arm/v7"
-    goos: linux
-    goarch: arm
-    goarm: "7"
-
-docker_manifests:
-  - name_template: "ghcr.io/ryanmcafee/port-forwarding-controller:{{ .Version }}"
-    image_templates:
-      - "ghcr.io/ryanmcafee/port-forwarding-controller:{{ .Version }}-amd64"
-      - "ghcr.io/ryanmcafee/port-forwarding-controller:{{ .Version }}-arm64"
-      - "ghcr.io/ryanmcafee/port-forwarding-controller:{{ .Version }}-armv7"
-  - name_template: "ghcr.io/ryanmcafee/port-forwarding-controller:latest"
-    image_templates:
-      - "ghcr.io/ryanmcafee/port-forwarding-controller:{{ .Version }}-amd64"
-      - "ghcr.io/ryanmcafee/port-forwarding-controller:{{ .Version }}-arm64"
-      - "ghcr.io/ryanmcafee/port-forwarding-controller:{{ .Version }}-armv7"
+    images:
+      - ghcr.io/ryanmcafee/port-forwarding-controller
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+      - linux/arm/v7
+    labels:
+      "org.opencontainers.image.title": "{{ .ProjectName }}"
+      "org.opencontainers.image.version": "{{ .Version }}"
+      "org.opencontainers.image.source": "{{ .GitURL }}"
+      "org.opencontainers.image.created": "{{ .Date }}"
+      "org.opencontainers.image.revision": "{{ .FullCommit }}"
 
 changelog:
   sort: asc
