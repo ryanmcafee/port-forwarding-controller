@@ -23,8 +23,7 @@ jobs:
       - uses: jdx/mise-action@v2
       - name: Install envtest binaries
         run: |
-          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
-          KUBEBUILDER_ASSETS=$($(go env GOPATH)/bin/setup-envtest use -p path)
+          KUBEBUILDER_ASSETS=$(go run sigs.k8s.io/controller-runtime/tools/setup-envtest@latest use -p path)
           echo "KUBEBUILDER_ASSETS=${KUBEBUILDER_ASSETS}" >> $GITHUB_ENV
       - run: go test -v -race -coverprofile=coverage.out ./...
       - uses: codecov/codecov-action@v4
