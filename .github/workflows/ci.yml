@@ -21,11 +21,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v2
-      - name: Install envtest binaries
-        run: |
-          KUBEBUILDER_ASSETS=$(go run sigs.k8s.io/controller-runtime/tools/setup-envtest@latest use -p path)
-          echo "KUBEBUILDER_ASSETS=${KUBEBUILDER_ASSETS}" >> $GITHUB_ENV
-      - run: go test -v -race -coverprofile=coverage.out ./...
+      - name: Run tests
+        run: make test
       - uses: codecov/codecov-action@v4
         if: always()
 
