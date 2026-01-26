@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"github.com/ljfranklin/port-forwarding-controller/pkg/controller/service"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/controller/service"
 )
 
 func init() {

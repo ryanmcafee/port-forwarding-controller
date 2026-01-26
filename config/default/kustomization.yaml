@@ -1,22 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Adds namespace to all resources.
 namespace: kube-system
 
+# Value of this field is prepended to the names of all resources
 namePrefix: port-forwarding-
 
+# Labels to add to all resources and selectors
+labels:
+- includeSelectors: true
+  pairs:
+    app.kubernetes.io/name: port-forwarding-controller
+    app.kubernetes.io/managed-by: kustomize
+
 resources:
-- ../rbac/rbac_role.yaml
-- ../rbac/rbac_role_binding.yaml
-- ../manager/manager.yaml
+- ../rbac
+- ../manager
 
 patches:
-- manager_patch.yaml
-
-vars:
-- name: WEBHOOK_SECRET_NAME
-  objref:
-    kind: Secret
-    name: webhook-server-secret
-    apiVersion: v1
-
-secretGenerator:
-- name: router
-  envCommand: "cat ../../secrets/router.env"
+- path: manager_patch.yaml

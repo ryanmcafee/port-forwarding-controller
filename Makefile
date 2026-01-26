@@ -1,63 +1,166 @@
-
-IMG ?= ljfranklin/port-forwarding-controller
+# Image URL to use all building/pushing image targets
+IMG ?= ghcr.io/ryanmcafee/port-forwarding-controller
 IMG_TAG ?= latest
 
-all: dev-setup test manager
+# ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
+ENVTEST_K8S_VERSION = 1.31.0
 
-# Install deps
-dev-setup:
-	./scripts/dev-setup.sh
+# Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
+ifeq (,$(shell go env GOBIN))
+GOBIN=$(shell go env GOPATH)/bin
+else
+GOBIN=$(shell go env GOBIN)
+endif
 
-# Run tests
-test: generate fmt vet manifests
-	KUBEBUILDER_ASSETS=$(shell pwd)/bin go test ./pkg/... ./cmd/... -coverprofile cover.out
+# CONTAINER_TOOL defines the container tool to be used for building images.
+CONTAINER_TOOL ?= docker
 
-# Build manager binary
-manager: generate fmt vet
-	go build -o bin/manager github.com/ljfranklin/port-forwarding-controller/cmd/manager
+# Setting SHELL to bash allows bash commands to be executed by recipes.
+SHELL = /usr/bin/env bash -o pipefail
+.SHELLFLAGS = -ec
 
-# Run against the configured Kubernetes cluster in ~/.kube/config
-run: generate fmt vet
+.PHONY: all
+all: build
+
+##@ General
+
+.PHONY: help
+help: ## Display this help.
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+
+##@ Development
+
+.PHONY: manifests
+manifests: controller-gen ## Generate RBAC objects.
+	$(CONTROLLER_GEN) rbac:roleName=manager-role paths="./..." output:rbac:artifacts:config=config/rbac
+
+.PHONY: generate
+generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+
+.PHONY: fmt
+fmt: ## Run go fmt against code.
+	go fmt ./...
+
+.PHONY: vet
+vet: ## Run go vet against code.
+	go vet ./...
+
+.PHONY: test
+test: manifests generate fmt vet envtest ## Run tests.
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+
+.PHONY: test-e2e
+test-e2e: ## Run the e2e tests against a Kind k8s instance.
+	go test ./test/e2e/ -v -ginkgo.v
+
+##@ Helm
+
+.PHONY: helm-test
+helm-test: helm-lint helm-template ## Test Helm chart (lint and template validation).
+
+.PHONY: helm-lint
+helm-lint: ## Lint Helm chart.
+	helm lint ./charts/port-forwarding --set router.url=https://test.local --set router.username=admin --set router.password=secret
+
+.PHONY: helm-template
+helm-template: ## Render Helm templates to verify syntax.
+	helm template port-forwarding ./charts/port-forwarding --set router.url=https://test.local --set router.username=admin --set router.password=secret --debug
+
+##@ Build
+
+.PHONY: build
+build: manifests generate fmt vet ## Build manager binary.
+	go build -o bin/manager ./cmd/manager
+
+.PHONY: run
+run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/manager/main.go
 
-# Install CRDs into a cluster
-install: manifests
-	kubectl apply -f config/crds
+.PHONY: docker-build
+docker-build: ## Build docker image using GoReleaser.
+	goreleaser build --snapshot --clean
 
-# Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: manifests
-	./bin/kustomize build config/default | kubectl apply -f -
+##@ Deployment
 
-# Delete controller in the configured Kubernetes cluster in ~/.kube/config
-delete-deployment: manifests
-	./bin/kustomize build config/default | kubectl delete -f -
+.PHONY: install
+install: manifests kustomize ## Install RBAC into the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/rbac | kubectl apply -f -
 
-# Generate manifests e.g. CRD, RBAC etc.
-manifests:
-	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
+.PHONY: uninstall
+uninstall: manifests kustomize ## Uninstall RBAC from the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/rbac | kubectl delete --ignore-not-found -f -
 
-# Run go fmt against code
-fmt:
-	go fmt ./pkg/... ./cmd/...
+.PHONY: deploy
+deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/default | kubectl apply -f -
 
-# Run go vet against code
-vet:
-	go vet ./pkg/... ./cmd/...
+.PHONY: undeploy
+undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/default | kubectl delete --ignore-not-found -f -
 
-# Generate code
-generate:
-	go generate ./pkg/... ./cmd/...
+##@ Release
 
-# Build the docker image
-docker-build:
-	IMAGE=$(IMG) ./scripts/docker-build.sh
+.PHONY: release
+release: ## Build and release using GoReleaser.
+	goreleaser release --clean
 
-# Push the docker image
-docker-push:
-	docker push $(IMG):amd64-$(IMG_TAG)
-	docker push $(IMG):arm32v6-$(IMG_TAG)
-	docker push $(IMG):arm64v8-$(IMG_TAG)
-	docker manifest create --amend $(IMG):$(IMG_TAG) $(IMG):amd64-$(IMG_TAG) $(IMG):arm32v6-$(IMG_TAG) $(IMG):arm64v8-$(IMG_TAG)
-	docker manifest annotate $(IMG):$(IMG_TAG) $(IMG):arm32v6-$(IMG_TAG) --os linux --arch arm
-	docker manifest annotate $(IMG):$(IMG_TAG) $(IMG):arm64v8-$(IMG_TAG) --os linux --arch arm64 --variant armv8
-	docker manifest push --purge $(IMG):$(IMG_TAG)
+.PHONY: release-snapshot
+release-snapshot: ## Local release test.
+	goreleaser release --snapshot --clean
+
+##@ Dependencies
+
+## Location to install dependencies to
+LOCALBIN ?= $(shell pwd)/bin
+$(LOCALBIN):
+	mkdir -p $(LOCALBIN)
+
+## Tool Binaries
+KUBECTL ?= kubectl
+KUSTOMIZE ?= $(LOCALBIN)/kustomize
+CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
+ENVTEST ?= $(LOCALBIN)/setup-envtest
+GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
+
+## Tool Versions
+KUSTOMIZE_VERSION ?= v5.5.0
+CONTROLLER_TOOLS_VERSION ?= v0.17.2
+ENVTEST_VERSION ?= release-0.19
+GOLANGCI_LINT_VERSION ?= v1.64.5
+
+.PHONY: kustomize
+kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
+$(KUSTOMIZE): $(LOCALBIN)
+	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5,$(KUSTOMIZE_VERSION))
+
+.PHONY: controller-gen
+controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
+$(CONTROLLER_GEN): $(LOCALBIN)
+	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
+
+.PHONY: envtest
+envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
+$(ENVTEST): $(LOCALBIN)
+	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest,$(ENVTEST_VERSION))
+
+.PHONY: golangci-lint
+golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
+$(GOLANGCI_LINT): $(LOCALBIN)
+	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+
+# go-install-tool will 'go install' any package with custom target and target name.
+# $1 - target path with name of binary
+# $2 - package url which can be installed
+# $3 - specific version of package
+define go-install-tool
+@[ -f "$(1)-$(3)" ] || { \
+set -e; \
+package=$(2)@$(3) ;\
+echo "Downloading $${package}" ;\
+rm -f $(1) || true ;\
+GOBIN=$(LOCALBIN) go install $${package} ;\
+mv $(1) $(1)-$(3) ;\
+} ;\
+ln -sf $(1)-$(3) $(1)
+endef

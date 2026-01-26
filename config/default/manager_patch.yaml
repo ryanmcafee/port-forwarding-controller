@@ -8,7 +8,7 @@ spec:
     spec:
       containers:
       - name: manager
-        image: ljfranklin/port-forwarding-controller:latest
+        image: ghcr.io/ryanmcafee/port-forwarding-controller:latest
         env:
           - name: ROUTER_URL
             valueFrom:

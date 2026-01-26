@@ -2,10 +2,10 @@
 package servicefakes
 
 import (
-	sync "sync"
+	"sync"
 
-	service "github.com/ljfranklin/port-forwarding-controller/pkg/controller/service"
-	forwarding "github.com/ljfranklin/port-forwarding-controller/pkg/forwarding"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/controller/service"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/forwarding"
 )
 
 type FakePortForwardingReconciler struct {
@@ -46,15 +46,16 @@ func (fake *FakePortForwardingReconciler) CreateAddresses(arg1 []forwarding.Addr
 	fake.createAddressesArgsForCall = append(fake.createAddressesArgsForCall, struct {
 		arg1 []forwarding.Address
 	}{arg1Copy})
+	stub := fake.CreateAddressesStub
+	fakeReturns := fake.createAddressesReturns
 	fake.recordInvocation("CreateAddresses", []interface{}{arg1Copy})
 	fake.createAddressesMutex.Unlock()
-	if fake.CreateAddressesStub != nil {
-		return fake.CreateAddressesStub(arg1)
+	if stub != nil {
+		return stub(arg1)
 	}
 	if specificReturn {
 		return ret.result1
 	}
-	fakeReturns := fake.createAddressesReturns
 	return fakeReturns.result1
 }
 
@@ -111,15 +112,16 @@ func (fake *FakePortForwardingReconciler) DeleteAddresses(arg1 []forwarding.Addr
 	fake.deleteAddressesArgsForCall = append(fake.deleteAddressesArgsForCall, struct {
 		arg1 []forwarding.Address
 	}{arg1Copy})
+	stub := fake.DeleteAddressesStub
+	fakeReturns := fake.deleteAddressesReturns
 	fake.recordInvocation("DeleteAddresses", []interface{}{arg1Copy})
 	fake.deleteAddressesMutex.Unlock()
-	if fake.DeleteAddressesStub != nil {
-		return fake.DeleteAddressesStub(arg1)
+	if stub != nil {
+		return stub(arg1)
 	}
 	if specificReturn {
 		return ret.result1
 	}
-	fakeReturns := fake.deleteAddressesReturns
 	return fakeReturns.result1
 }
 
@@ -168,10 +170,6 @@ func (fake *FakePortForwardingReconciler) DeleteAddressesReturnsOnCall(i int, re
 func (fake *FakePortForwardingReconciler) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.createAddressesMutex.RLock()
-	defer fake.createAddressesMutex.RUnlock()
-	fake.deleteAddressesMutex.RLock()
-	defer fake.deleteAddressesMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/cookiejar"
 	"strconv"
 
-	"github.com/ljfranklin/port-forwarding-controller/pkg/forwarding"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/forwarding"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -173,7 +172,7 @@ func (c Client) makeAPICall(method, endpoint string, body []byte) ([]byte, error
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if c.isLoginError(resp) {
 		if err := c.login(); err != nil {
 			return nil, err
@@ -183,7 +182,7 @@ func (c Client) makeAPICall(method, endpoint string, body []byte) ([]byte, error
 		return nil, c.buildRespErr(resp)
 	}
 
-	return ioutil.ReadAll(resp.Body)
+	return io.ReadAll(resp.Body)
 }
 
 func (c Client) isLoginError(resp *http.Response) bool {
@@ -222,7 +221,7 @@ func (c Client) login() error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
 		return c.buildRespErr(resp)
 	}
@@ -232,13 +231,13 @@ func (c Client) login() error {
 
 func (c Client) buildRespErr(resp *http.Response) error {
 	if resp.Body == nil {
-		return fmt.Errorf("Invalid response code %d", resp.StatusCode)
+		return fmt.Errorf("invalid response code %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("Invalid response code %d", resp.StatusCode)
+		return fmt.Errorf("invalid response code %d", resp.StatusCode)
 	}
 
-	return fmt.Errorf("Invalid response code %d: %s", resp.StatusCode, string(body))
+	return fmt.Errorf("invalid response code %d: %s", resp.StatusCode, string(body))
 }

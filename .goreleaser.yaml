@@ -1,0 +1,87 @@
+version: 2
+project_name: port-forwarding-controller
+
+builds:
+  - id: manager
+    main: ./cmd/manager
+    binary: manager
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - "7"
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+dockers_v2:
+  - id: port-forwarding-controller
+    dockerfile: Dockerfile
+    images:
+      - ghcr.io/ryanmcafee/port-forwarding-controller
+    tags:
+      - "{{ .Version }}"
+      - "{{ if not .Prerelease }}latest{{ end }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+      - linux/arm/v7
+    labels:
+      "org.opencontainers.image.title": "{{ .ProjectName }}"
+      "org.opencontainers.image.version": "{{ .Version }}"
+      "org.opencontainers.image.source": "{{ .GitURL }}"
+      "org.opencontainers.image.created": "{{ .Date }}"
+      "org.opencontainers.image.revision": "{{ .FullCommit }}"
+
+changelog:
+  sort: asc
+  use: github
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Documentation
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: Others
+      order: 999
+
+release:
+  github:
+    owner: ryanmcafee
+    name: port-forwarding-controller
+  draft: false
+  prerelease: auto
+  header: |
+    ## Installation
+
+    **Helm:**
+    ```bash
+    helm repo add port-forwarding https://ryanmcafee.github.io/port-forwarding-controller
+    helm install port-forwarding port-forwarding/port-forwarding \
+      --set router.url=YOUR_ROUTER_URL \
+      --set router.username=YOUR_USERNAME \
+      --set router.password=YOUR_PASSWORD
+    ```
+
+    **Docker:**
+    ```bash
+    docker pull ghcr.io/ryanmcafee/port-forwarding-controller:{{ .Version }}
+    ```
