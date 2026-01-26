@@ -2,9 +2,9 @@
 package forwardingfakes
 
 import (
-	sync "sync"
+	"sync"
 
-	forwarding "github.com/ljfranklin/port-forwarding-controller/pkg/forwarding"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/forwarding"
 )
 
 type FakeInfoLogger struct {
@@ -24,9 +24,10 @@ func (fake *FakeInfoLogger) Info(arg1 string, arg2 ...interface{}) {
 		arg1 string
 		arg2 []interface{}
 	}{arg1, arg2})
+	stub := fake.InfoStub
 	fake.recordInvocation("Info", []interface{}{arg1, arg2})
 	fake.infoMutex.Unlock()
-	if fake.InfoStub != nil {
+	if stub != nil {
 		fake.InfoStub(arg1, arg2...)
 	}
 }
@@ -53,8 +54,6 @@ func (fake *FakeInfoLogger) InfoArgsForCall(i int) (string, []interface{}) {
 func (fake *FakeInfoLogger) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.infoMutex.RLock()
-	defer fake.infoMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

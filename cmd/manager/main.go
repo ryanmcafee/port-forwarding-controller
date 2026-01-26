@@ -1,22 +1,31 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 
-	"github.com/ljfranklin/port-forwarding-controller/pkg/apis"
-	"github.com/ljfranklin/port-forwarding-controller/pkg/controller"
-	"github.com/ljfranklin/port-forwarding-controller/pkg/forwarding"
-	"github.com/ljfranklin/port-forwarding-controller/pkg/unifi"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/apis"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/controller"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/forwarding"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/unifi"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
-	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
+	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+)
+
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
 )
 
 func main() {
-	logf.SetLogger(logf.ZapLogger(false))
+	fmt.Printf("port-forwarding-controller version=%s commit=%s date=%s\n", version, commit, date)
+	logf.SetLogger(zap.New())
 	log := logf.Log.WithName("entrypoint")
 
 	// Get a config to talk to the apiserver

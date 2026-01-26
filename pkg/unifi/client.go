@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/cookiejar"
 	"strconv"
 
-	"github.com/ljfranklin/port-forwarding-controller/pkg/forwarding"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/forwarding"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -183,7 +182,7 @@ func (c Client) makeAPICall(method, endpoint string, body []byte) ([]byte, error
 		return nil, c.buildRespErr(resp)
 	}
 
-	return ioutil.ReadAll(resp.Body)
+	return io.ReadAll(resp.Body)
 }
 
 func (c Client) isLoginError(resp *http.Response) bool {
@@ -235,7 +234,7 @@ func (c Client) buildRespErr(resp *http.Response) error {
 		return fmt.Errorf("Invalid response code %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("Invalid response code %d", resp.StatusCode)
 	}

@@ -2,14 +2,14 @@ package unifi_test
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ljfranklin/port-forwarding-controller/pkg/forwarding"
-	"github.com/ljfranklin/port-forwarding-controller/pkg/unifi"
 	. "github.com/onsi/gomega"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/forwarding"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/unifi"
 )
 
 type testServer struct {
@@ -45,7 +45,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		body, err := ioutil.ReadAll(r.Body)
+		body, err := io.ReadAll(r.Body)
 		g.Expect(err).NotTo(HaveOccurred())
 
 		g.Expect(string(body)).To(MatchJSON(`{"username": "some-user", "password": "some-password"}`))
@@ -106,7 +106,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(c.Value).To(Equal("some-value"))
 
-			s.lastCreateRequestBody, err = ioutil.ReadAll(r.Body)
+			s.lastCreateRequestBody, err = io.ReadAll(r.Body)
 			g.Expect(err).NotTo(HaveOccurred())
 			defer r.Body.Close()
 

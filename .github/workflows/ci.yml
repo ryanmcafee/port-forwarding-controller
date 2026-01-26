@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - run: golangci-lint run
+      - name: Helm lint
+        run: helm lint ./charts/port-forwarding --set router.url=https://test --set router.username=test --set router.password=test
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - name: Install envtest binaries
+        run: |
+          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+          setup-envtest use --bin-dir /usr/local/kubebuilder/bin
+          echo "KUBEBUILDER_ASSETS=/usr/local/kubebuilder/bin" >> $GITHUB_ENV
+      - run: go test -v -race -coverprofile=coverage.out ./...
+      - uses: codecov/codecov-action@v4
+        if: always()
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - run: go build -o bin/manager ./cmd/manager
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: goreleaser/goreleaser-action@v5
+        with:
+          args: build --snapshot --clean

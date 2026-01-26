@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ljfranklin/port-forwarding-controller/pkg/forwarding"
-	"github.com/ljfranklin/port-forwarding-controller/pkg/forwarding/forwardingfakes"
 	. "github.com/onsi/gomega"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/forwarding"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/forwarding/forwardingfakes"
 )
 
 func TestCreateAddressesWithNoExistingRules(t *testing.T) {

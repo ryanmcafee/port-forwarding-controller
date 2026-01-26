@@ -6,20 +6,20 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	"github.com/ljfranklin/port-forwarding-controller/pkg/forwarding"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/forwarding"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const AnnotationPrefix = "port-forwarding.lylefranklin.com"
+const AnnotationPrefix = "port-forwarding.ryanmcafee.com"
 
 //go:generate counterfeiter . PortForwardingReconciler
 type PortForwardingReconciler interface {
@@ -49,12 +49,16 @@ func NewReconciler(mgr manager.Manager, pfr PortForwardingReconciler) reconcile.
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	c, err := controller.New("service-controller", mgr, controller.Options{Reconciler: r})
+	skipValidation := true
+	c, err := controller.New("service-controller", mgr, controller.Options{
+		Reconciler:         r,
+		SkipNameValidation: &skipValidation, // Allow multiple managers in tests
+	})
 	if err != nil {
 		return err
 	}
 
-	err = c.Watch(&source.Kind{Type: &corev1.Service{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(source.Kind(mgr.GetCache(), &corev1.Service{}, &handler.TypedEnqueueRequestForObject[*corev1.Service]{}))
 	if err != nil {
 		return err
 	}
@@ -75,10 +79,10 @@ type ReconcileService struct {
 // Reconcile reads that state of the cluster for a Service object and makes changes based on the state read
 // and what is in the Service.Spec
 // +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
-func (r *ReconcileService) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileService) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Fetch the Service instance
 	instance := &corev1.Service{}
-	err := r.Get(context.TODO(), request.NamespacedName, instance)
+	err := r.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Object not found, return.  Created objects are automatically garbage collected.

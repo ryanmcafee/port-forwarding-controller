@@ -2,9 +2,9 @@
 package forwardingfakes
 
 import (
-	sync "sync"
+	"sync"
 
-	forwarding "github.com/ljfranklin/port-forwarding-controller/pkg/forwarding"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/forwarding"
 )
 
 type FakeRouterClient struct {
@@ -53,15 +53,16 @@ func (fake *FakeRouterClient) CreateAddress(arg1 forwarding.Address) error {
 	fake.createAddressArgsForCall = append(fake.createAddressArgsForCall, struct {
 		arg1 forwarding.Address
 	}{arg1})
+	stub := fake.CreateAddressStub
+	fakeReturns := fake.createAddressReturns
 	fake.recordInvocation("CreateAddress", []interface{}{arg1})
 	fake.createAddressMutex.Unlock()
-	if fake.CreateAddressStub != nil {
-		return fake.CreateAddressStub(arg1)
+	if stub != nil {
+		return stub(arg1)
 	}
 	if specificReturn {
 		return ret.result1
 	}
-	fakeReturns := fake.createAddressReturns
 	return fakeReturns.result1
 }
 
@@ -113,15 +114,16 @@ func (fake *FakeRouterClient) DeleteAddress(arg1 forwarding.Address) error {
 	fake.deleteAddressArgsForCall = append(fake.deleteAddressArgsForCall, struct {
 		arg1 forwarding.Address
 	}{arg1})
+	stub := fake.DeleteAddressStub
+	fakeReturns := fake.deleteAddressReturns
 	fake.recordInvocation("DeleteAddress", []interface{}{arg1})
 	fake.deleteAddressMutex.Unlock()
-	if fake.DeleteAddressStub != nil {
-		return fake.DeleteAddressStub(arg1)
+	if stub != nil {
+		return stub(arg1)
 	}
 	if specificReturn {
 		return ret.result1
 	}
-	fakeReturns := fake.deleteAddressReturns
 	return fakeReturns.result1
 }
 
@@ -173,15 +175,16 @@ func (fake *FakeRouterClient) ListAddresses(arg1 map[string]string) ([]forwardin
 	fake.listAddressesArgsForCall = append(fake.listAddressesArgsForCall, struct {
 		arg1 map[string]string
 	}{arg1})
+	stub := fake.ListAddressesStub
+	fakeReturns := fake.listAddressesReturns
 	fake.recordInvocation("ListAddresses", []interface{}{arg1})
 	fake.listAddressesMutex.Unlock()
-	if fake.ListAddressesStub != nil {
-		return fake.ListAddressesStub(arg1)
+	if stub != nil {
+		return stub(arg1)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2
 	}
-	fakeReturns := fake.listAddressesReturns
 	return fakeReturns.result1, fakeReturns.result2
 }
 
@@ -233,12 +236,6 @@ func (fake *FakeRouterClient) ListAddressesReturnsOnCall(i int, result1 []forwar
 func (fake *FakeRouterClient) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
-	fake.createAddressMutex.RLock()
-	defer fake.createAddressMutex.RUnlock()
-	fake.deleteAddressMutex.RLock()
-	defer fake.deleteAddressMutex.RUnlock()
-	fake.listAddressesMutex.RLock()
-	defer fake.listAddressesMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

@@ -5,6 +5,36 @@ automatically creates a corresponding port forwarding rule on your router.
 
 Currently Unifi routers are the only supported router model.
 
+#### Prerequisites
+
+This project uses [mise](https://mise.jdx.dev/) for tool version management.
+
+**Install mise:**
+```bash
+curl https://mise.run | sh
+```
+
+**Activate mise in your shell:**
+```bash
+# For bash - add to ~/.bashrc
+eval "$(mise activate bash)"
+
+# For zsh - add to ~/.zshrc
+eval "$(mise activate zsh)"
+
+# For fish - add to ~/.config/fish/config.fish
+mise activate fish | source
+```
+
+After adding the activation line, restart your shell or source your config file.
+
+**Install project tools:**
+```bash
+mise install
+```
+
+This will install Go 1.25 as specified in `.mise.toml`.
+
 #### Use Case
 
 The expected use case is to create a DNS record which points to your router's
@@ -16,7 +46,7 @@ For example, you might deploy an [nginx-ingress](https://github.com/kubernetes/i
 Service with the following annotation:
 
 ```
-port-forwarding.lylefranklin.com/enable: "true"
+port-forwarding.ryanmcafee.com/enable: "true"
 ```
 
 The port-forwarding-controller will notice this new annotated Service and add
@@ -28,7 +58,7 @@ the IP of the new Service.
 The controller supports Services of type [LoadBalancer](https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer)
 and Services with a non-empty [externalIPs property](https://kubernetes.io/docs/concepts/services-networking/service/#external-ips).
 Services must be [annotated](https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/)
-with `port-forwarding.lylefranklin.com/enable: "true"` for the controller to
+with `port-forwarding.ryanmcafee.com/enable: "true"` for the controller to
 manage forwarding rules for that Service.
 
 ##### LoadBalancer Service
@@ -86,24 +116,43 @@ This is due to port forwarding rules requiring a one-to-one mapping of port to I
 
 #### Deploying the Controller
 
-##### With Helm
+##### With Helm (Recommended)
 
-- Deploy Helm/Tiller into your k8s cluster
-- Create a `./secrets/router.yml` file with the following fields (additional optional props [here](./chart/values.yml)):
-  ```
-  router:
-    url: $YOUR_ROUTER_URL
-    username: $YOUR_ROUTER_USERNAME
-    password: $YOUR_ROUTER_PASSWORD
-  ```
-- Run the following command to install or upgrade the controller:
-  ```
-  helm upgrade \
-    --install \
-    --values ./secrets/router.yml \
-    port-forwarding \
-    https://storage.googleapis.com/ansible-assets/port-forwarding-0.1.0.tgz
-  ```
+Add the Helm repository:
+```bash
+helm repo add port-forwarding https://ryanmcafee.github.io/port-forwarding-controller
+helm repo update
+```
+
+Install the chart:
+```bash
+helm install port-forwarding port-forwarding/port-forwarding \
+  --set router.url=YOUR_ROUTER_URL \
+  --set router.username=YOUR_USERNAME \
+  --set router.password=YOUR_PASSWORD
+```
+
+Or create a `values.yaml` file with your configuration:
+```yaml
+router:
+  url: https://your-router-url
+  username: your-username
+  password: your-password
+```
+
+Then install:
+```bash
+helm install port-forwarding port-forwarding/port-forwarding -f values.yaml
+```
+
+##### Docker Images
+
+Multi-architecture images are available on GitHub Container Registry:
+```bash
+docker pull ghcr.io/ryanmcafee/port-forwarding-controller:latest
+```
+
+Supported platforms: `linux/amd64`, `linux/arm64`, `linux/arm/v7`
 
 ##### Without Helm
 
@@ -121,12 +170,11 @@ This is due to port forwarding rules requiring a one-to-one mapping of port to I
 #### Additional options
 
 Additional optional Annotations:
-- `port-forwarding.lylefranklin.com/unifi-site: SOME_SITE`, defaults to `default` site
+- `port-forwarding.ryanmcafee.com/unifi-site: SOME_SITE`, defaults to `default` site
 
 #### Contributing
 
 - Run unit tests: `make test`
 - Try out controller in a local container: `make run`
 - Build docker images: `make docker-build`
-- Push docker images: `make docker-push`
-- Create a new controller class: `kubebuilder create api --group workloads --version v1beta1 --kind ContainerSet`
+- Test release locally: `make release-snapshot`

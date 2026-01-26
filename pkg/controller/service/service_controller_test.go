@@ -1,19 +1,20 @@
 package service_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
-	"github.com/ljfranklin/port-forwarding-controller/pkg/controller/service"
-	"github.com/ljfranklin/port-forwarding-controller/pkg/controller/service/servicefakes"
-	"github.com/ljfranklin/port-forwarding-controller/pkg/forwarding"
 	. "github.com/onsi/gomega"
-	"golang.org/x/net/context"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/controller/service"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/controller/service/servicefakes"
+	"github.com/ryanmcafee/port-forwarding-controller/pkg/forwarding"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -22,7 +23,11 @@ var c client.Client
 const timeout = time.Second * 5
 
 func startManager(g *GomegaWithT, pfr service.PortForwardingReconciler) (chan reconcile.Request, func()) {
-	mgr, err := manager.New(cfg, manager.Options{})
+	gracePeriod := time.Second * 1
+	mgr, err := manager.New(cfg, manager.Options{
+		Metrics:                 metricsserver.Options{BindAddress: "0"}, // Disable metrics server in tests
+		GracefulShutdownTimeout: &gracePeriod,
+	})
 	g.Expect(err).NotTo(HaveOccurred())
 	c = mgr.GetClient()
 
@@ -30,16 +35,16 @@ func startManager(g *GomegaWithT, pfr service.PortForwardingReconciler) (chan re
 	recFn, requests := SetupTestReconcile(reconciler)
 	g.Expect(service.AddWithReconciler(mgr, recFn)).NotTo(HaveOccurred())
 
-	stopMgr, mgrStopped := StartTestManager(mgr, g)
+	cancelFunc, mgrStopped := StartTestManager(mgr, g)
 
 	return requests, func() {
-		close(stopMgr)
+		cancelFunc()
 		mgrStopped.Wait()
 	}
 }
 
 func createServiceAndWait(g *GomegaWithT, svc *corev1.Service, requests chan reconcile.Request) {
-	err := c.Create(context.TODO(), svc)
+	err := c.Create(context.Background(), svc)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	expectedRequest := reconcile.Request{
@@ -56,7 +61,7 @@ func createServiceAndWait(g *GomegaWithT, svc *corev1.Service, requests chan rec
 }
 
 func deleteServiceAndWait(g *GomegaWithT, svc *corev1.Service, requests chan reconcile.Request) {
-	err := c.Delete(context.TODO(), svc)
+	err := c.Delete(context.Background(), svc)
 	g.Expect(err).NotTo(HaveOccurred())
 
 	expectedRequest := reconcile.Request{
@@ -77,10 +82,10 @@ func TestReconcileWithLoadBalancer(t *testing.T) {
 
 	instance := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "some-svc",
+			Name:      "svc-loadbalancer",
 			Namespace: "default",
 			Annotations: map[string]string{
-				"port-forwarding.lylefranklin.com/enable": "true",
+				"port-forwarding.ryanmcafee.com/enable": "true",
 			},
 		},
 		Spec: corev1.ServiceSpec{
@@ -94,13 +99,13 @@ func TestReconcileWithLoadBalancer(t *testing.T) {
 		},
 	}
 	createServiceAndWait(g, instance, requests)
-	defer c.Delete(context.TODO(), instance)
+	defer c.Delete(context.Background(), instance)
 
 	// Create may get called a second time after finalizer is added
 	g.Expect(fakePFR.CreateAddressesCallCount()).To(BeNumerically(">=", 1))
 	g.Expect(fakePFR.CreateAddressesArgsForCall(0)).To(Equal([]forwarding.Address{
 		{
-			Name:    "default-some-svc",
+			Name:    "default-svc-loadbalancer",
 			Port:    80,
 			IP:      "1.2.3.4",
 			Options: map[string]string{},
@@ -117,10 +122,10 @@ func TestReconcileWithLoadBalancerSourceRange(t *testing.T) {
 
 	instance := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "some-svc",
+			Name:      "svc-sourcerange",
 			Namespace: "default",
 			Annotations: map[string]string{
-				"port-forwarding.lylefranklin.com/enable": "true",
+				"port-forwarding.ryanmcafee.com/enable": "true",
 			},
 		},
 		Spec: corev1.ServiceSpec{
@@ -135,13 +140,13 @@ func TestReconcileWithLoadBalancerSourceRange(t *testing.T) {
 		},
 	}
 	createServiceAndWait(g, instance, requests)
-	defer c.Delete(context.TODO(), instance)
+	defer c.Delete(context.Background(), instance)
 
 	// Create may get called a second time after finalizer is added
 	g.Expect(fakePFR.CreateAddressesCallCount()).To(BeNumerically(">=", 1))
 	g.Expect(fakePFR.CreateAddressesArgsForCall(0)).To(Equal([]forwarding.Address{
 		{
-			Name:        "default-some-svc",
+			Name:        "default-svc-sourcerange",
 			Port:        80,
 			IP:          "1.2.3.4",
 			SourceRange: "10.0.0.0/16",
@@ -159,10 +164,10 @@ func TestReconcileWithExternalIP(t *testing.T) {
 
 	instance := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "some-svc",
+			Name:      "svc-externalip",
 			Namespace: "default",
 			Annotations: map[string]string{
-				"port-forwarding.lylefranklin.com/enable": "true",
+				"port-forwarding.ryanmcafee.com/enable": "true",
 			},
 		},
 		Spec: corev1.ServiceSpec{
@@ -176,13 +181,13 @@ func TestReconcileWithExternalIP(t *testing.T) {
 		},
 	}
 	createServiceAndWait(g, instance, requests)
-	defer c.Delete(context.TODO(), instance)
+	defer c.Delete(context.Background(), instance)
 
 	// Create may get called a second time after finalizer is added
 	g.Expect(fakePFR.CreateAddressesCallCount()).To(BeNumerically(">=", 1))
 	g.Expect(fakePFR.CreateAddressesArgsForCall(0)).To(Equal([]forwarding.Address{
 		{
-			Name:    "default-some-svc",
+			Name:    "default-svc-externalip",
 			Port:    80,
 			IP:      "1.2.3.4",
 			Options: map[string]string{},
@@ -199,11 +204,11 @@ func TestReconcileWithOptionAnnotations(t *testing.T) {
 
 	instance := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "some-svc",
+			Name:      "svc-options",
 			Namespace: "default",
 			Annotations: map[string]string{
-				"port-forwarding.lylefranklin.com/enable":     "true",
-				"port-forwarding.lylefranklin.com/unifi-site": "some-site",
+				"port-forwarding.ryanmcafee.com/enable":     "true",
+				"port-forwarding.ryanmcafee.com/unifi-site": "some-site",
 			},
 		},
 		Spec: corev1.ServiceSpec{
@@ -217,13 +222,13 @@ func TestReconcileWithOptionAnnotations(t *testing.T) {
 		},
 	}
 	createServiceAndWait(g, instance, requests)
-	defer c.Delete(context.TODO(), instance)
+	defer c.Delete(context.Background(), instance)
 
 	// Create may get called a second time after finalizer is added
 	g.Expect(fakePFR.CreateAddressesCallCount()).To(BeNumerically(">=", 1))
 	g.Expect(fakePFR.CreateAddressesArgsForCall(0)).To(Equal([]forwarding.Address{
 		{
-			Name: "default-some-svc",
+			Name: "default-svc-options",
 			Port: 80,
 			IP:   "1.2.3.4",
 			Options: map[string]string{
@@ -242,7 +247,7 @@ func TestReconcileWithNoAnnotation(t *testing.T) {
 
 	nonAnnotatedInstance := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        "some-ignored-svc",
+			Name:        "svc-noannotation",
 			Namespace:   "default",
 			Annotations: map[string]string{},
 		},
@@ -257,7 +262,7 @@ func TestReconcileWithNoAnnotation(t *testing.T) {
 		},
 	}
 	createServiceAndWait(g, nonAnnotatedInstance, requests)
-	defer c.Delete(context.TODO(), nonAnnotatedInstance)
+	defer c.Delete(context.Background(), nonAnnotatedInstance)
 
 	g.Expect(fakePFR.CreateAddressesCallCount()).To(Equal(0))
 }
@@ -271,10 +276,10 @@ func TestReconcileWithDelete(t *testing.T) {
 
 	instance := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "some-svc",
+			Name:      "svc-delete",
 			Namespace: "default",
 			Annotations: map[string]string{
-				"port-forwarding.lylefranklin.com/enable": "true",
+				"port-forwarding.ryanmcafee.com/enable": "true",
 			},
 		},
 		Spec: corev1.ServiceSpec{
@@ -294,7 +299,7 @@ func TestReconcileWithDelete(t *testing.T) {
 	g.Expect(fakePFR.DeleteAddressesCallCount()).To(Equal(1))
 	g.Expect(fakePFR.DeleteAddressesArgsForCall(0)).To(Equal([]forwarding.Address{
 		{
-			Name:    "default-some-svc",
+			Name:    "default-svc-delete",
 			Port:    80,
 			IP:      "1.2.3.4",
 			Options: map[string]string{},
