@@ -67,6 +67,38 @@ helm-lint: ## Lint Helm chart.
 helm-template: ## Render Helm templates to verify syntax.
 	helm template port-forwarding ./charts/port-forwarding --set router.url=https://test.local --set router.username=admin --set router.password=secret --debug
 
+# Helm E2E test configuration
+HELM_TEST_CLUSTER ?= helm-test
+HELM_TEST_IMAGE ?= port-forwarding-controller:test
+
+.PHONY: helm-e2e
+helm-e2e: helm-e2e-setup helm-e2e-run helm-e2e-cleanup ## Run full Helm E2E test cycle.
+
+.PHONY: helm-e2e-setup
+helm-e2e-setup: ## Set up Kind cluster and build test image.
+	kind create cluster --name $(HELM_TEST_CLUSTER) --config test/helm/kind-config.yaml || true
+	goreleaser build --snapshot --clean
+	docker build -t $(HELM_TEST_IMAGE) --build-arg TARGETPLATFORM=linux/amd64 .
+	kind load docker-image $(HELM_TEST_IMAGE) --name $(HELM_TEST_CLUSTER)
+
+.PHONY: helm-e2e-run
+helm-e2e-run: ## Run Helm tests (assumes cluster exists).
+	KUBE_CONTEXT=kind-$(HELM_TEST_CLUSTER) \
+	TEST_IMAGE_REPO=port-forwarding-controller \
+	TEST_IMAGE_TAG=test \
+	go test -v -timeout 15m ./test/helm/...
+
+.PHONY: helm-e2e-cleanup
+helm-e2e-cleanup: ## Delete Kind cluster.
+	kind delete cluster --name $(HELM_TEST_CLUSTER) || true
+
+.PHONY: helm-e2e-quick
+helm-e2e-quick: ## Run tests without rebuild (fast iteration).
+	KUBE_CONTEXT=kind-$(HELM_TEST_CLUSTER) \
+	TEST_IMAGE_REPO=port-forwarding-controller \
+	TEST_IMAGE_TAG=test \
+	go test -v -timeout 15m ./test/helm/...
+
 ##@ Build
 
 .PHONY: build

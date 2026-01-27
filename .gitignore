@@ -16,6 +16,10 @@
 *.dylib
 bin
 
+# GoReleaser build artifacts
+dist/
+linux/
+
 # Test binary, build with `go test -c`
 *.test
 

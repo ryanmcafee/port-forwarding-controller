@@ -1,0 +1,8 @@
+router:
+  url: "https://mock-router.local"
+  username: "test-user"
+  password: "test-password"
+resources:
+  limits:
+    cpu: 100m
+    memory: 64Mi
