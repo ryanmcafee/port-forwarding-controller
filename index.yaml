@@ -2,6 +2,26 @@ apiVersion: v1
 entries:
   port-forwarding:
   - apiVersion: v2
+    appVersion: 1.0.2
+    created: "2026-01-27T03:18:54.147900015Z"
+    description: A Kubernetes controller that configures port forwarding rules on
+      routers (e.g. Unifi) for Services
+    digest: 7ea10a0b0a1914a336093044580fe531842d33ebda427a6fd95095df3d38f727
+    home: https://github.com/ryanmcafee/port-forwarding-controller
+    keywords:
+    - kubernetes
+    - controller
+    - port-forwarding
+    - unifi
+    - router
+    name: port-forwarding
+    sources:
+    - https://github.com/ryanmcafee/port-forwarding-controller
+    type: application
+    urls:
+    - https://github.com/ryanmcafee/port-forwarding-controller/releases/download/port-forwarding-1.0.2/port-forwarding-1.0.2.tgz
+    version: 1.0.2
+  - apiVersion: v2
     appVersion: 1.0.0
     created: "2026-01-26T22:12:46.434424945Z"
     description: A Kubernetes controller that configures port forwarding rules on
@@ -21,4 +41,4 @@ entries:
     urls:
     - https://github.com/ryanmcafee/port-forwarding-controller/releases/download/port-forwarding-1.0.0/port-forwarding-1.0.0.tgz
     version: 1.0.0
-generated: "2026-01-26T22:12:46.4344332Z"
+generated: "2026-01-27T03:18:54.147909603Z"
