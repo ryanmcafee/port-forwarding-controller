@@ -55,6 +55,8 @@ spec:
           value: {{ .Values.router.rule_prefix | default "kube-" | quote }}
         - name: ROUTER_SKIP_TLS_VERIFICATION
           value: {{ .Values.router.skipTlsVerification | default true | toString | quote }}
+        - name: ROUTER_DEVICE_TYPE
+          value: {{ .Values.router.deviceType | default "standard" | quote }}
         {{- else }}
         - name: ROUTER_RULE_PREFIX
           valueFrom:
@@ -66,6 +68,12 @@ spec:
             secretKeyRef:
               key: {{ .Values.router.secretKeys.skipTlsVerification | default "ROUTER_SKIP_TLS_VERIFICATION" }}
               name: {{ $secretName }}
+        - name: ROUTER_DEVICE_TYPE
+          valueFrom:
+            secretKeyRef:
+              key: {{ .Values.router.secretKeys.deviceType | default "ROUTER_DEVICE_TYPE" }}
+              name: {{ $secretName }}
+              optional: true
         {{- end }}
         - name: POD_NAMESPACE
           valueFrom:

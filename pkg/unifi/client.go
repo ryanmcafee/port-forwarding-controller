@@ -13,12 +13,23 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
+// DeviceType represents the type of UniFi device being controlled.
+type DeviceType string
+
+const (
+	// DeviceTypeStandard is for legacy UniFi Controller software.
+	DeviceTypeStandard DeviceType = "standard"
+	// DeviceTypeUDM is for UniFi Dream Machine and Dream Router devices.
+	DeviceTypeUDM DeviceType = "udm"
+)
+
 type Client struct {
 	HTTPClient    *http.Client
 	ControllerURL string
 	Username      string
 	Password      string
-	APIKey        string // Preferred over username/password when set
+	APIKey        string     // Preferred over username/password when set
+	DeviceType    DeviceType // "standard" (default) or "udm" for UDM/UDR devices
 }
 
 type baseResponse struct {
@@ -83,7 +94,7 @@ func (c Client) ListAddresses(options map[string]string) ([]forwarding.Address, 
 }
 
 func (c Client) list(options map[string]string) (listResponse, error) {
-	endpoint := fmt.Sprintf("%s/api/s/%s/rest/portforward", c.ControllerURL, c.siteName(options))
+	endpoint := c.portForwardEndpoint(c.siteName(options))
 	respBody, err := c.makeAPICall("GET", endpoint, nil)
 	if err != nil {
 		return listResponse{}, err
@@ -104,6 +115,33 @@ func (c Client) siteName(options map[string]string) string {
 	return "default"
 }
 
+// apiBasePath returns the base API path based on device type.
+// UDM/UDR devices use /proxy/network/api, standard controllers use /api.
+func (c Client) apiBasePath() string {
+	if c.DeviceType == DeviceTypeUDM {
+		return "/proxy/network/api"
+	}
+	return "/api"
+}
+
+// loginEndpoint returns the full login URL based on device type.
+func (c Client) loginEndpoint() string {
+	if c.DeviceType == DeviceTypeUDM {
+		return fmt.Sprintf("%s/api/auth/login", c.ControllerURL)
+	}
+	return fmt.Sprintf("%s/api/login", c.ControllerURL)
+}
+
+// portForwardEndpoint returns the port forward API endpoint for the given site.
+func (c Client) portForwardEndpoint(siteName string) string {
+	return fmt.Sprintf("%s%s/s/%s/rest/portforward", c.ControllerURL, c.apiBasePath(), siteName)
+}
+
+// portForwardDeleteEndpoint returns the port forward delete endpoint for a specific rule.
+func (c Client) portForwardDeleteEndpoint(siteName, id string) string {
+	return fmt.Sprintf("%s%s/s/%s/rest/portforward/%s", c.ControllerURL, c.apiBasePath(), siteName, id)
+}
+
 func (c Client) CreateAddress(address forwarding.Address) error {
 	src := "any"
 	if address.SourceRange != "" {
@@ -122,8 +160,7 @@ func (c Client) CreateAddress(address forwarding.Address) error {
 		return err
 	}
 
-	endpoint := fmt.Sprintf("%s/api/s/%s/rest/portforward", c.ControllerURL, c.siteName(address.Options))
-	// TODO: do we need content-type?
+	endpoint := c.portForwardEndpoint(c.siteName(address.Options))
 	if _, err := c.makeAPICall("POST", endpoint, reqBody); err != nil {
 		return err
 	}
@@ -151,7 +188,7 @@ func (c Client) DeleteAddress(address forwarding.Address) error {
 		return nil
 	}
 
-	endpoint := fmt.Sprintf("%s/api/s/%s/rest/portforward/%s", c.ControllerURL, c.siteName(address.Options), matchingID)
+	endpoint := c.portForwardDeleteEndpoint(c.siteName(address.Options), matchingID)
 	_, err = c.makeAPICall("DELETE", endpoint, nil)
 	if err != nil {
 		return err
@@ -226,7 +263,7 @@ func (c Client) login() error {
 		return err
 	}
 
-	endpoint := fmt.Sprintf("%s/api/login", c.ControllerURL)
+	endpoint := c.loginEndpoint()
 	resp, err := c.HTTPClient.Post(endpoint, "application/json", bytes.NewReader(reqBody))
 	if err != nil {
 		return err
