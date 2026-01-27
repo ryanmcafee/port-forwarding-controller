@@ -48,7 +48,7 @@ vet: ## Run go vet against code.
 
 .PHONY: test
 test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e | grep -v /test/helm) -coverprofile cover.out
 
 .PHONY: test-e2e
 test-e2e: ## Run the e2e tests against a Kind k8s instance.
@@ -78,6 +78,7 @@ helm-e2e: helm-e2e-setup helm-e2e-run helm-e2e-cleanup ## Run full Helm E2E test
 helm-e2e-setup: ## Set up Kind cluster and build test image.
 	kind create cluster --name $(HELM_TEST_CLUSTER) --config test/helm/kind-config.yaml || true
 	goreleaser build --snapshot --clean
+	mkdir -p linux/amd64 && cp dist/manager_linux_amd64_v1/manager linux/amd64/manager
 	docker build -t $(HELM_TEST_IMAGE) --build-arg TARGETPLATFORM=linux/amd64 .
 	kind load docker-image $(HELM_TEST_IMAGE) --name $(HELM_TEST_CLUSTER)
 
