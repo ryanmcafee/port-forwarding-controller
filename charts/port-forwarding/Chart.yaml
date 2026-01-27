@@ -1,6 +1,6 @@
 apiVersion: v2
 name: port-forwarding
-version: 1.0.3
+version: 1.0.4
 appVersion: "1.0.3"
 description: A Kubernetes controller that configures port forwarding rules on routers (e.g. Unifi) for Services
 type: application

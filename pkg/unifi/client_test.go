@@ -15,12 +15,14 @@ import (
 type testServer struct {
 	t                     *testing.T
 	siteName              string
+	apiKey                string
 	customLoginHandler    http.Handler
 	customListHandler     http.Handler
 	customCreateHandler   http.Handler
 	customDeleteHandler   http.Handler
 	lastCreateRequestBody []byte
 	deleteCallCount       int
+	loginCallCount        int
 }
 
 func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -30,7 +32,17 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.siteName = "default"
 	}
 
-	if r.URL.Path != "/api/login" {
+	// Check for API key authentication first
+	if s.apiKey != "" {
+		apiKeyHeader := r.Header.Get("X-Api-Key")
+		if apiKeyHeader == s.apiKey {
+			// Valid API key, proceed without cookie check
+		} else if r.URL.Path != "/api/login" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"data": [] ,"meta": {"msg": "api.err.LoginRequired", "rc": "error"}}`))
+			return
+		}
+	} else if r.URL.Path != "/api/login" {
 		if _, err := r.Cookie("some-cookie"); err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			_, _ = w.Write([]byte(`{"data": [] ,"meta": {"msg": "api.err.LoginRequired", "rc": "error"}}`))
@@ -40,6 +52,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch r.URL.Path {
 	case "/api/login":
+		s.loginCallCount++
 		if s.customLoginHandler != nil {
 			s.customLoginHandler.ServeHTTP(w, r)
 			return
@@ -63,9 +76,12 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			c, err := r.Cookie("some-cookie")
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(c.Value).To(Equal("some-value"))
+			// Only check cookie if not using API key auth
+			if s.apiKey == "" {
+				c, err := r.Cookie("some-cookie")
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(c.Value).To(Equal("some-value"))
+			}
 
 			_, _ = w.Write([]byte(`{
 				"data": [
@@ -102,10 +118,14 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			c, err := r.Cookie("some-cookie")
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(c.Value).To(Equal("some-value"))
+			// Only check cookie if not using API key auth
+			if s.apiKey == "" {
+				c, err := r.Cookie("some-cookie")
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(c.Value).To(Equal("some-value"))
+			}
 
+			var err error
 			s.lastCreateRequestBody, err = io.ReadAll(r.Body)
 			g.Expect(err).NotTo(HaveOccurred())
 			defer func() { _ = r.Body.Close() }()
@@ -122,9 +142,12 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			c, err := r.Cookie("some-cookie")
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(c.Value).To(Equal("some-value"))
+			// Only check cookie if not using API key auth
+			if s.apiKey == "" {
+				c, err := r.Cookie("some-cookie")
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(c.Value).To(Equal("some-value"))
+			}
 
 			s.deleteCallCount++
 
@@ -484,4 +507,83 @@ func TestDeleteAddAddressWithBadCode(t *testing.T) {
 	})
 	g.Expect(err).To(HaveOccurred())
 	g.Expect(err.Error()).To(ContainSubstring("500"))
+}
+
+func TestListAddressesWithAPIKey(t *testing.T) {
+	g := NewGomegaWithT(t)
+
+	fakeServer := &testServer{t: t, apiKey: "test-api-key"}
+	ts := httptest.NewTLSServer(fakeServer)
+	defer ts.Close()
+
+	testClient := ts.Client()
+	client := unifi.Client{
+		HTTPClient:    testClient,
+		ControllerURL: ts.URL,
+		APIKey:        "test-api-key",
+	}
+
+	addresses, err := client.ListAddresses(nil)
+	g.Expect(err).NotTo(HaveOccurred())
+	g.Expect(addresses).To(Equal([]forwarding.Address{
+		{
+			Name: "name-1",
+			Port: 80,
+			IP:   "1.2.3.4",
+		},
+		{
+			Name:        "name-2",
+			Port:        443,
+			IP:          "5.6.7.8",
+			SourceRange: "10.0.0.0/16",
+		},
+	}))
+}
+
+func TestAPIKeySkipsLogin(t *testing.T) {
+	g := NewGomegaWithT(t)
+
+	fakeServer := &testServer{t: t, apiKey: "test-api-key"}
+	ts := httptest.NewTLSServer(fakeServer)
+	defer ts.Close()
+
+	testClient := ts.Client()
+	client := unifi.Client{
+		HTTPClient:    testClient,
+		ControllerURL: ts.URL,
+		APIKey:        "test-api-key",
+	}
+
+	// Make multiple API calls to verify no login is attempted
+	_, err := client.ListAddresses(nil)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	err = client.CreateAddress(forwarding.Address{
+		Name: "name-1",
+		Port: 80,
+		IP:   "1.2.3.4",
+	})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Verify no login calls were made
+	g.Expect(fakeServer.loginCallCount).To(Equal(0))
+}
+
+func TestAPIKeyAuthenticationFailure(t *testing.T) {
+	g := NewGomegaWithT(t)
+
+	fakeServer := &testServer{t: t, apiKey: "correct-api-key"}
+	ts := httptest.NewTLSServer(fakeServer)
+	defer ts.Close()
+
+	testClient := ts.Client()
+	client := unifi.Client{
+		HTTPClient:    testClient,
+		ControllerURL: ts.URL,
+		APIKey:        "wrong-api-key",
+	}
+
+	_, err := client.ListAddresses(nil)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("401"))
 }

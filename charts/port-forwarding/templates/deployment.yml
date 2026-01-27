@@ -24,34 +24,49 @@ spec:
         release: {{ .Release.Name }}
     spec:
       containers:
+      {{- $secretName := .Values.router.existingSecret | default (include "port-forwarding.fullname" .) }}
+      {{- $useExistingSecret := .Values.router.existingSecret }}
       - command:
         - /root/manager
         env:
         - name: ROUTER_URL
           valueFrom:
             secretKeyRef:
-              key: ROUTER_URL
-              name: {{ include "port-forwarding.fullname" . }}
+              key: {{ .Values.router.secretKeys.url | default "ROUTER_URL" }}
+              name: {{ $secretName }}
         - name: ROUTER_USERNAME
           valueFrom:
             secretKeyRef:
-              key: ROUTER_USERNAME
-              name: {{ include "port-forwarding.fullname" . }}
+              key: {{ .Values.router.secretKeys.username | default "ROUTER_USERNAME" }}
+              name: {{ $secretName }}
         - name: ROUTER_PASSWORD
           valueFrom:
             secretKeyRef:
-              key: ROUTER_PASSWORD
-              name: {{ include "port-forwarding.fullname" . }}
+              key: {{ .Values.router.secretKeys.password | default "ROUTER_PASSWORD" }}
+              name: {{ $secretName }}
+        - name: ROUTER_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: {{ .Values.router.secretKeys.apiKey | default "ROUTER_API_KEY" }}
+              name: {{ $secretName }}
+              optional: true
+        {{- if $useExistingSecret }}
+        - name: ROUTER_RULE_PREFIX
+          value: {{ .Values.router.rule_prefix | default "kube-" | quote }}
+        - name: ROUTER_SKIP_TLS_VERIFICATION
+          value: {{ .Values.router.skipTlsVerification | default true | toString | quote }}
+        {{- else }}
         - name: ROUTER_RULE_PREFIX
           valueFrom:
             secretKeyRef:
-              key: ROUTER_RULE_PREFIX
-              name: {{ include "port-forwarding.fullname" . }}
+              key: {{ .Values.router.secretKeys.rulePrefix | default "ROUTER_RULE_PREFIX" }}
+              name: {{ $secretName }}
         - name: ROUTER_SKIP_TLS_VERIFICATION
           valueFrom:
             secretKeyRef:
-              key: ROUTER_SKIP_TLS_VERIFICATION
-              name: {{ include "port-forwarding.fullname" . }}
+              key: {{ .Values.router.secretKeys.skipTlsVerification | default "ROUTER_SKIP_TLS_VERIFICATION" }}
+              name: {{ $secretName }}
+        {{- end }}
         - name: POD_NAMESPACE
           valueFrom:
             fieldRef:

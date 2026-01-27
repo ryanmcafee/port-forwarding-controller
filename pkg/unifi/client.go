@@ -18,6 +18,7 @@ type Client struct {
 	ControllerURL string
 	Username      string
 	Password      string
+	APIKey        string // Preferred over username/password when set
 }
 
 type baseResponse struct {
@@ -168,12 +169,21 @@ func (c Client) makeAPICall(method, endpoint string, body []byte) ([]byte, error
 	if err != nil {
 		return nil, err
 	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	if c.APIKey != "" {
+		req.Header.Set("X-Api-Key", c.APIKey)
+	}
+
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if c.isLoginError(resp) {
+
+	// Only handle login errors when NOT using API key
+	if c.APIKey == "" && c.isLoginError(resp) {
 		if err := c.login(); err != nil {
 			return nil, err
 		}
