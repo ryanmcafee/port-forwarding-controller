@@ -1,0 +1,17 @@
+router:
+  url: "https://custom-router.local"
+  username: "custom-user"
+  password: "custom-password"
+  rule_prefix: "custom-"
+  skipTlsVerification: false
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 32Mi
+
+nodeSelector:
+  node-role.kubernetes.io/control-plane: ""

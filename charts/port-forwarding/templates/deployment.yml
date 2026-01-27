@@ -6,7 +6,7 @@ metadata:
     app: {{ include "port-forwarding.name" . }}
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
     release: {{ .Release.Name }}
-  name: {{ include "port-forwarding.serviceAccountName" . }}
+  name: {{ include "port-forwarding.fullname" . }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
