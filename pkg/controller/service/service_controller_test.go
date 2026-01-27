@@ -345,6 +345,10 @@ func TestReconcileWithLoadBalancerStatusIP(t *testing.T) {
 	}
 	g.Eventually(requests, timeout).Should(Receive(Equal(expectedRequest)))
 
+	// Re-fetch the service to get the latest resourceVersion (controller may have added finalizer)
+	err = c.Get(context.Background(), types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, instance)
+	g.Expect(err).NotTo(HaveOccurred())
+
 	// Update status with LoadBalancer ingress IP (simulating what a real LB controller does)
 	instance.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{
 		{IP: "10.20.30.40"},
@@ -409,6 +413,10 @@ func TestReconcileWithLoadBalancerStatusIPTakesPrecedence(t *testing.T) {
 		},
 	}
 	g.Eventually(requests, timeout).Should(Receive(Equal(expectedRequest)))
+
+	// Re-fetch the service to get the latest resourceVersion (controller may have added finalizer)
+	err = c.Get(context.Background(), types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, instance)
+	g.Expect(err).NotTo(HaveOccurred())
 
 	// Update status with different LoadBalancer ingress IP
 	instance.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{
