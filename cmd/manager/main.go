@@ -1,9 +1,11 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/ryanmcafee/port-forwarding-controller/pkg/apis"
 	"github.com/ryanmcafee/port-forwarding-controller/pkg/controller"
@@ -22,6 +24,24 @@ var (
 	commit  = "none"
 	date    = "unknown"
 )
+
+// newHTTPClient creates an HTTP client with optional TLS verification skip.
+// When skipTLSVerification is "true" or "1", certificate verification is disabled.
+func newHTTPClient(skipTLSVerification string) *http.Client {
+	client := &http.Client{}
+	if shouldSkipTLSVerification(skipTLSVerification) {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+	return client
+}
+
+// shouldSkipTLSVerification returns true if TLS verification should be skipped.
+func shouldSkipTLSVerification(value string) bool {
+	v := strings.ToLower(value)
+	return v == "true" || v == "1"
+}
 
 func main() {
 	fmt.Printf("port-forwarding-controller version=%s commit=%s date=%s\n", version, commit, date)
@@ -55,8 +75,16 @@ func main() {
 
 	// Setup all Controllers
 	log.Info("Setting up controller")
+
+	// Configure HTTP client with optional TLS skip verification
+	skipTLS := os.Getenv("ROUTER_SKIP_TLS_VERIFICATION")
+	if shouldSkipTLSVerification(skipTLS) {
+		log.Info("TLS certificate verification disabled")
+	}
+	httpClient := newHTTPClient(skipTLS)
+
 	routerClient := unifi.Client{
-		HTTPClient:    &http.Client{},
+		HTTPClient:    httpClient,
 		ControllerURL: os.Getenv("ROUTER_URL"),
 		Username:      os.Getenv("ROUTER_USERNAME"),
 		Password:      os.Getenv("ROUTER_PASSWORD"),

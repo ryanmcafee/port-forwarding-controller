@@ -1,6 +1,6 @@
 ---
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   labels:
     app: {{ include "port-forwarding.name" . }}
@@ -9,7 +9,6 @@ metadata:
   name: {{ include "port-forwarding.serviceAccountName" . }}
 spec:
   replicas: {{ .Values.replicaCount }}
-  serviceName: {{ include "port-forwarding.fullname" . }}
   selector:
     matchLabels:
       control-plane: controller-manager
@@ -47,6 +46,11 @@ spec:
           valueFrom:
             secretKeyRef:
               key: ROUTER_RULE_PREFIX
+              name: {{ include "port-forwarding.fullname" . }}
+        - name: ROUTER_SKIP_TLS_VERIFICATION
+          valueFrom:
+            secretKeyRef:
+              key: ROUTER_SKIP_TLS_VERIFICATION
               name: {{ include "port-forwarding.fullname" . }}
         - name: POD_NAMESPACE
           valueFrom:
