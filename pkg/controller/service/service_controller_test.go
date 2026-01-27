@@ -306,3 +306,130 @@ func TestReconcileWithDelete(t *testing.T) {
 		},
 	}))
 }
+
+func TestReconcileWithLoadBalancerStatusIP(t *testing.T) {
+	g := NewGomegaWithT(t)
+
+	fakePFR := &servicefakes.FakePortForwardingReconciler{}
+	requests, shutdown := startManager(g, fakePFR)
+	defer shutdown()
+
+	// Create service without Spec.LoadBalancerIP (modern LB controllers don't use it)
+	instance := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "svc-status-ip",
+			Namespace: "default",
+			Annotations: map[string]string{
+				"port-forwarding.ryanmcafee.com/enable": "true",
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Type: "LoadBalancer",
+			Ports: []corev1.ServicePort{
+				{
+					Port: 443,
+				},
+			},
+		},
+	}
+	err := c.Create(context.Background(), instance)
+	g.Expect(err).NotTo(HaveOccurred())
+	defer func() { _ = c.Delete(context.Background(), instance) }()
+
+	// Wait for initial reconciliation
+	expectedRequest := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      instance.Name,
+			Namespace: "default",
+		},
+	}
+	g.Eventually(requests, timeout).Should(Receive(Equal(expectedRequest)))
+
+	// Update status with LoadBalancer ingress IP (simulating what a real LB controller does)
+	instance.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{
+		{IP: "10.20.30.40"},
+	}
+	err = c.Status().Update(context.Background(), instance)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Wait for status update to trigger reconciliation
+	g.Eventually(requests, timeout).Should(Receive(Equal(expectedRequest)))
+	// May get additional reconciliation from finalizer
+	g.Eventually(requests, timeout).Should(Receive(Equal(expectedRequest)))
+
+	// Verify the IP was extracted from Status.LoadBalancer.Ingress
+	g.Eventually(func() string {
+		if fakePFR.CreateAddressesCallCount() == 0 {
+			return ""
+		}
+		addresses := fakePFR.CreateAddressesArgsForCall(fakePFR.CreateAddressesCallCount() - 1)
+		if len(addresses) == 0 {
+			return ""
+		}
+		return addresses[0].IP
+	}, timeout).Should(Equal("10.20.30.40"))
+}
+
+func TestReconcileWithLoadBalancerStatusIPTakesPrecedence(t *testing.T) {
+	g := NewGomegaWithT(t)
+
+	fakePFR := &servicefakes.FakePortForwardingReconciler{}
+	requests, shutdown := startManager(g, fakePFR)
+	defer shutdown()
+
+	// Create service with both Spec.LoadBalancerIP and Status.LoadBalancer.Ingress
+	// Status should take precedence
+	instance := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "svc-both-ips",
+			Namespace: "default",
+			Annotations: map[string]string{
+				"port-forwarding.ryanmcafee.com/enable": "true",
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Type:           "LoadBalancer",
+			LoadBalancerIP: "1.1.1.1", // Legacy spec IP
+			Ports: []corev1.ServicePort{
+				{
+					Port: 8080,
+				},
+			},
+		},
+	}
+	err := c.Create(context.Background(), instance)
+	g.Expect(err).NotTo(HaveOccurred())
+	defer func() { _ = c.Delete(context.Background(), instance) }()
+
+	// Wait for initial reconciliation
+	expectedRequest := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      instance.Name,
+			Namespace: "default",
+		},
+	}
+	g.Eventually(requests, timeout).Should(Receive(Equal(expectedRequest)))
+
+	// Update status with different LoadBalancer ingress IP
+	instance.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{
+		{IP: "2.2.2.2"}, // Status IP should take precedence
+	}
+	err = c.Status().Update(context.Background(), instance)
+	g.Expect(err).NotTo(HaveOccurred())
+
+	// Wait for status update to trigger reconciliation
+	g.Eventually(requests, timeout).Should(Receive(Equal(expectedRequest)))
+	g.Eventually(requests, timeout).Should(Receive(Equal(expectedRequest)))
+
+	// Verify the IP was extracted from Status (2.2.2.2) not Spec (1.1.1.1)
+	g.Eventually(func() string {
+		if fakePFR.CreateAddressesCallCount() == 0 {
+			return ""
+		}
+		addresses := fakePFR.CreateAddressesArgsForCall(fakePFR.CreateAddressesCallCount() - 1)
+		if len(addresses) == 0 {
+			return ""
+		}
+		return addresses[0].IP
+	}, timeout).Should(Equal("2.2.2.2"))
+}
