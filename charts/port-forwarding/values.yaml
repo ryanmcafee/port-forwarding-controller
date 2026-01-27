@@ -27,6 +27,7 @@ router:
     apiKey: ROUTER_API_KEY
     rulePrefix: ROUTER_RULE_PREFIX
     skipTlsVerification: ROUTER_SKIP_TLS_VERIFICATION
+    deviceType: ROUTER_DEVICE_TYPE
   # Set to true to create a new secret with the values below
   createSecret: true
   url: ""
@@ -36,6 +37,8 @@ router:
   apiKey: ""
   rule_prefix: kube-
   skipTlsVerification: true
+  # Device type: "standard" for legacy UniFi Controller, "udm" for UDM/UDR devices
+  deviceType: "standard"
 
 nameOverride: ""
 fullnameOverride: ""

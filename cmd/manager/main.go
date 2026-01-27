@@ -89,12 +89,23 @@ func main() {
 		log.Info("Using API key authentication")
 	}
 
+	// Determine device type for API path selection
+	deviceType := unifi.DeviceTypeStandard
+	if dt := os.Getenv("ROUTER_DEVICE_TYPE"); dt != "" {
+		switch strings.ToLower(dt) {
+		case "udm", "udr":
+			deviceType = unifi.DeviceTypeUDM
+			log.Info("Using UDM/UDR API paths")
+		}
+	}
+
 	routerClient := unifi.Client{
 		HTTPClient:    httpClient,
 		ControllerURL: os.Getenv("ROUTER_URL"),
 		Username:      os.Getenv("ROUTER_USERNAME"),
 		Password:      os.Getenv("ROUTER_PASSWORD"),
 		APIKey:        apiKey,
+		DeviceType:    deviceType,
 	}
 	forwardingReconciler := forwarding.Reconciler{
 		RouterClient: routerClient,
