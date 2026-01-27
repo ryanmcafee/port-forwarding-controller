@@ -44,6 +44,12 @@ spec:
             secretKeyRef:
               key: {{ .Values.router.secretKeys.password | default "ROUTER_PASSWORD" }}
               name: {{ $secretName }}
+        - name: ROUTER_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: {{ .Values.router.secretKeys.apiKey | default "ROUTER_API_KEY" }}
+              name: {{ $secretName }}
+              optional: true
         {{- if $useExistingSecret }}
         - name: ROUTER_RULE_PREFIX
           value: {{ .Values.router.rule_prefix | default "kube-" | quote }}

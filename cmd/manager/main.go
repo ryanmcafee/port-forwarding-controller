@@ -83,11 +83,18 @@ func main() {
 	}
 	httpClient := newHTTPClient(skipTLS)
 
+	// API key authentication takes priority over username/password
+	apiKey := os.Getenv("ROUTER_API_KEY")
+	if apiKey != "" {
+		log.Info("Using API key authentication")
+	}
+
 	routerClient := unifi.Client{
 		HTTPClient:    httpClient,
 		ControllerURL: os.Getenv("ROUTER_URL"),
 		Username:      os.Getenv("ROUTER_USERNAME"),
 		Password:      os.Getenv("ROUTER_PASSWORD"),
+		APIKey:        apiKey,
 	}
 	forwardingReconciler := forwarding.Reconciler{
 		RouterClient: routerClient,
