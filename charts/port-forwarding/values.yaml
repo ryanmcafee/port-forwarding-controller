@@ -17,10 +17,20 @@ serviceAccount:
   name:
 
 router:
+  # Use an existing secret instead of creating one
+  existingSecret: ""
+  # Key names in the secret (useful when using existingSecret with different key names)
+  secretKeys:
+    url: ROUTER_URL
+    username: ROUTER_USERNAME
+    password: ROUTER_PASSWORD
+    rulePrefix: ROUTER_RULE_PREFIX
+    skipTlsVerification: ROUTER_SKIP_TLS_VERIFICATION
+  # Set to true to create a new secret with the values below
   createSecret: true
-  url:
-  username:
-  password:
+  url: ""
+  username: ""
+  password: ""
   rule_prefix: kube-
   skipTlsVerification: true
 
