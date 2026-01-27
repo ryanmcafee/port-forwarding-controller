@@ -158,9 +158,20 @@ func isAnnotatedLB(instance *corev1.Service) bool {
 
 func ipFromService(svc *corev1.Service) string {
 	if svc.Spec.Type == "LoadBalancer" {
+		// First check Status.LoadBalancer.Ingress (modern LB controllers like Cilium, MetalLB, cloud providers)
+		if len(svc.Status.LoadBalancer.Ingress) > 0 {
+			ingress := svc.Status.LoadBalancer.Ingress[0]
+			if ingress.IP != "" {
+				return ingress.IP
+			}
+		}
+		// Fall back to Spec.LoadBalancerIP (deprecated but still used by some implementations)
 		return svc.Spec.LoadBalancerIP
 	}
-	return svc.Spec.ExternalIPs[0]
+	if len(svc.Spec.ExternalIPs) > 0 {
+		return svc.Spec.ExternalIPs[0]
+	}
+	return ""
 }
 
 func sourceRangeFromService(svc *corev1.Service) string {
