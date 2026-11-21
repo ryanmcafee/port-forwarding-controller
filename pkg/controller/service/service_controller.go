@@ -21,6 +21,8 @@ import (
 
 const AnnotationPrefix = "port-forwarding.ryanmcafee.com"
 
+const finalizerName = "finalizer." + AnnotationPrefix + "/v1"
+
 //go:generate counterfeiter . PortForwardingReconciler
 type PortForwardingReconciler interface {
 	CreateAddresses([]forwarding.Address) error
@@ -94,13 +96,49 @@ func (r *ReconcileService) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	if isAnnotatedLB(instance) {
-		return r.processLB(instance)
+		return r.processLB(ctx, instance)
+	}
+
+	if containsString(instance.Finalizers, finalizerName) {
+		return r.removeForwarding(ctx, instance)
 	}
 
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileService) processLB(instance *corev1.Service) (reconcile.Result, error) {
+func (r *ReconcileService) processLB(ctx context.Context, instance *corev1.Service) (reconcile.Result, error) {
+	if !instance.DeletionTimestamp.IsZero() {
+		if containsString(instance.Finalizers, finalizerName) {
+			return r.removeForwarding(ctx, instance)
+		}
+		return reconcile.Result{}, nil
+	}
+
+	if err := r.pfr.CreateAddresses(addressesFromService(instance)); err != nil {
+		return reconcile.Result{}, err
+	}
+	if !containsString(instance.Finalizers, finalizerName) {
+		instance.Finalizers = append(instance.Finalizers, finalizerName)
+		if err := r.Update(ctx, instance); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileService) removeForwarding(ctx context.Context, instance *corev1.Service) (reconcile.Result, error) {
+	if err := r.pfr.DeleteAddresses(addressesFromService(instance)); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	instance.Finalizers = removeString(instance.Finalizers, finalizerName)
+	if err := r.Update(ctx, instance); err != nil {
+		return reconcile.Result{}, err
+	}
+	return reconcile.Result{}, nil
+}
+
+func addressesFromService(instance *corev1.Service) []forwarding.Address {
 	addresses := []forwarding.Address{}
 	targetIP := ipFromService(instance)
 	sourceRange := sourceRangeFromService(instance)
@@ -115,34 +153,7 @@ func (r *ReconcileService) processLB(instance *corev1.Service) (reconcile.Result
 			Options:     options,
 		})
 	}
-
-	finalizerName := fmt.Sprintf("finalizer.%s/v1", AnnotationPrefix)
-
-	if instance.DeletionTimestamp.IsZero() {
-		err := r.pfr.CreateAddresses(addresses)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-		if !containsString(instance.Finalizers, finalizerName) {
-			instance.Finalizers = append(instance.Finalizers, finalizerName)
-			if err = r.Update(context.Background(), instance); err != nil {
-				return reconcile.Result{}, err
-			}
-		}
-	} else {
-		if containsString(instance.Finalizers, finalizerName) {
-			err := r.pfr.DeleteAddresses(addresses)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-
-			instance.Finalizers = removeString(instance.Finalizers, finalizerName)
-			if err = r.Update(context.Background(), instance); err != nil {
-				return reconcile.Result{}, err
-			}
-		}
-	}
-	return reconcile.Result{}, nil
+	return addresses
 }
 
 func isAnnotatedLB(instance *corev1.Service) bool {
