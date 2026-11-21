@@ -173,10 +173,10 @@ func (r Reconciler) staleAddresses(desiredAddresses, existingAddresses []Address
 func (r Reconciler) addressesToDelete(removedAddresses, existingAddresses []Address) []Address {
 	addressesToDelete := []Address{}
 	for _, removedAddress := range removedAddresses {
-		removedAddress.Name = fmt.Sprintf("%s-%d", removedAddress.Name, removedAddress.Port)
+		ruleName := fmt.Sprintf("%s-%d", removedAddress.Name, removedAddress.Port)
 		for _, existingAddress := range existingAddresses {
-			if reflect.DeepEqual(removedAddress, existingAddress) {
-				addressesToDelete = append(addressesToDelete, removedAddress)
+			if existingAddress.Name == ruleName && existingAddress.Port == removedAddress.Port {
+				addressesToDelete = append(addressesToDelete, existingAddress)
 			}
 		}
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/ryanmcafee/port-forwarding-controller/pkg/controller/service/servicefakes"
 	"github.com/ryanmcafee/port-forwarding-controller/pkg/forwarding"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -262,9 +263,10 @@ func TestReconcileWithNoAnnotation(t *testing.T) {
 		},
 	}
 	createServiceAndWait(g, nonAnnotatedInstance, requests)
-	defer func() { _ = c.Delete(context.Background(), nonAnnotatedInstance) }()
+	deleteServiceAndWait(g, nonAnnotatedInstance, requests)
 
 	g.Expect(fakePFR.CreateAddressesCallCount()).To(Equal(0))
+	g.Expect(deleteCallsFor(fakePFR, "default-svc-noannotation")()).To(BeEmpty())
 }
 
 func TestReconcileWithDelete(t *testing.T) {
@@ -296,15 +298,14 @@ func TestReconcileWithDelete(t *testing.T) {
 
 	deleteServiceAndWait(g, instance, requests)
 
-	g.Expect(fakePFR.DeleteAddressesCallCount()).To(Equal(1))
-	g.Expect(fakePFR.DeleteAddressesArgsForCall(0)).To(Equal([]forwarding.Address{
+	g.Expect(deleteCallsFor(fakePFR, "default-svc-delete")()).To(Equal([][]forwarding.Address{{
 		{
 			Name:    "default-svc-delete",
 			Port:    80,
 			IP:      "1.2.3.4",
 			Options: map[string]string{},
 		},
-	}))
+	}}))
 }
 
 func TestReconcileWithLoadBalancerStatusIP(t *testing.T) {
@@ -440,4 +441,105 @@ func TestReconcileWithLoadBalancerStatusIPTakesPrecedence(t *testing.T) {
 		}
 		return addresses[0].IP
 	}, timeout).Should(Equal("2.2.2.2"))
+}
+
+const finalizerName = "finalizer.port-forwarding.ryanmcafee.com/v1"
+
+// deleteCallsFor ignores calls for Services that earlier tests left terminating.
+func deleteCallsFor(fake *servicefakes.FakePortForwardingReconciler, ruleName string) func() [][]forwarding.Address {
+	return func() [][]forwarding.Address {
+		calls := [][]forwarding.Address{}
+		for i := 0; i < fake.DeleteAddressesCallCount(); i++ {
+			addresses := fake.DeleteAddressesArgsForCall(i)
+			if len(addresses) > 0 && addresses[0].Name == ruleName {
+				calls = append(calls, addresses)
+			}
+		}
+		return calls
+	}
+}
+
+// drain keeps the single reconcile worker from blocking on the unbuffered requests channel.
+func drain(requests chan reconcile.Request) {
+	for range requests {
+	}
+}
+
+func serviceFinalizers(g *GomegaWithT, svc *corev1.Service) func() []string {
+	return func() []string {
+		current := &corev1.Service{}
+		g.Expect(c.Get(context.Background(), client.ObjectKeyFromObject(svc), current)).To(Succeed())
+		return current.Finalizers
+	}
+}
+
+func TestReconcileWithAnnotationRemoved(t *testing.T) {
+	g := NewGomegaWithT(t)
+
+	fakePFR := &servicefakes.FakePortForwardingReconciler{}
+	requests, shutdown := startManager(g, fakePFR)
+	defer shutdown()
+
+	instance := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "svc-annotation-removed",
+			Namespace: "default",
+			Annotations: map[string]string{
+				"port-forwarding.ryanmcafee.com/enable": "true",
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Type:           "LoadBalancer",
+			LoadBalancerIP: "192.0.2.10",
+			Ports:          []corev1.ServicePort{{Name: "http", Port: 80}, {Name: "https", Port: 443}},
+		},
+	}
+	createServiceAndWait(g, instance, requests)
+	defer func() { _ = c.Delete(context.Background(), instance) }()
+	go drain(requests)
+	g.Eventually(serviceFinalizers(g, instance), timeout).Should(ContainElement(finalizerName))
+
+	g.Expect(c.Get(context.Background(), client.ObjectKeyFromObject(instance), instance)).To(Succeed())
+	delete(instance.Annotations, "port-forwarding.ryanmcafee.com/enable")
+	g.Expect(c.Update(context.Background(), instance)).To(Succeed())
+
+	g.Eventually(deleteCallsFor(fakePFR, "default-svc-annotation-removed"), timeout).Should(Equal([][]forwarding.Address{{
+		{Name: "default-svc-annotation-removed", Port: 80, IP: "192.0.2.10", Options: map[string]string{}},
+		{Name: "default-svc-annotation-removed", Port: 443, IP: "192.0.2.10", Options: map[string]string{}},
+	}}))
+	g.Eventually(serviceFinalizers(g, instance), timeout).ShouldNot(ContainElement(finalizerName))
+}
+
+func TestReconcileWithAnnotationRemovedWhileDeleting(t *testing.T) {
+	g := NewGomegaWithT(t)
+
+	directClient, err := client.New(cfg, client.Options{})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	instance := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "svc-annotation-removed-deleting",
+			Namespace:  "default",
+			Finalizers: []string{finalizerName},
+		},
+		Spec: corev1.ServiceSpec{
+			Type:  "ClusterIP",
+			Ports: []corev1.ServicePort{{Port: 80}},
+		},
+	}
+	g.Expect(directClient.Create(context.Background(), instance)).To(Succeed())
+	g.Expect(directClient.Delete(context.Background(), instance)).To(Succeed())
+
+	fakePFR := &servicefakes.FakePortForwardingReconciler{}
+	requests, shutdown := startManager(g, fakePFR)
+	defer shutdown()
+	go drain(requests)
+
+	g.Eventually(deleteCallsFor(fakePFR, "default-svc-annotation-removed-deleting"), timeout).Should(Equal([][]forwarding.Address{{
+		{Name: "default-svc-annotation-removed-deleting", Port: 80, Options: map[string]string{}},
+	}}))
+	g.Eventually(func() bool {
+		err := directClient.Get(context.Background(), client.ObjectKeyFromObject(instance), &corev1.Service{})
+		return apierrors.IsNotFound(err)
+	}, timeout).Should(BeTrue())
 }

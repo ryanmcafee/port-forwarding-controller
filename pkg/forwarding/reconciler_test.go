@@ -445,3 +445,44 @@ func TestDeleteAddressesWithDeleteError(t *testing.T) {
 	err := r.DeleteAddresses(extraRules)
 	g.Expect(err).To(MatchError("some-error"))
 }
+
+func TestDeleteAddressesMatchesByNameAndPortWithoutTargetIP(t *testing.T) {
+	g := NewGomegaWithT(t)
+
+	fakeRouter := &forwardingfakes.FakeRouterClient{}
+	fakeRouter.ListAddressesReturns([]forwarding.Address{
+		{
+			Name:        "test-some-svc-80",
+			Port:        80,
+			IP:          "192.0.2.10",
+			SourceRange: "198.51.100.0/24",
+		},
+		{
+			Name: "test-some-svc-443",
+			Port: 443,
+			IP:   "192.0.2.10",
+		},
+		{
+			Name: "test-other-svc-80",
+			Port: 80,
+			IP:   "192.0.2.11",
+		},
+	}, nil)
+
+	r := forwarding.Reconciler{
+		RouterClient: fakeRouter,
+		RulePrefix:   "test-",
+		Logger:       &forwardingfakes.FakeInfoLogger{},
+	}
+
+	err := r.DeleteAddresses([]forwarding.Address{{Name: "some-svc", Port: 80}})
+	g.Expect(err).NotTo(HaveOccurred())
+
+	g.Expect(fakeRouter.DeleteAddressCallCount()).To(Equal(1))
+	g.Expect(fakeRouter.DeleteAddressArgsForCall(0)).To(Equal(forwarding.Address{
+		Name:        "test-some-svc-80",
+		Port:        80,
+		IP:          "192.0.2.10",
+		SourceRange: "198.51.100.0/24",
+	}))
+}
