@@ -296,15 +296,14 @@ func TestReconcileWithDelete(t *testing.T) {
 
 	deleteServiceAndWait(g, instance, requests)
 
-	g.Expect(fakePFR.DeleteAddressesCallCount()).To(Equal(1))
-	g.Expect(fakePFR.DeleteAddressesArgsForCall(0)).To(Equal([]forwarding.Address{
+	g.Expect(deleteCallsFor(fakePFR, "default-svc-delete")()).To(Equal([][]forwarding.Address{{
 		{
 			Name:    "default-svc-delete",
 			Port:    80,
 			IP:      "1.2.3.4",
 			Options: map[string]string{},
 		},
-	}))
+	}}))
 }
 
 func TestReconcileWithLoadBalancerStatusIP(t *testing.T) {
@@ -440,4 +439,18 @@ func TestReconcileWithLoadBalancerStatusIPTakesPrecedence(t *testing.T) {
 		}
 		return addresses[0].IP
 	}, timeout).Should(Equal("2.2.2.2"))
+}
+
+// deleteCallsFor ignores calls for Services that earlier tests left terminating.
+func deleteCallsFor(fake *servicefakes.FakePortForwardingReconciler, ruleName string) func() [][]forwarding.Address {
+	return func() [][]forwarding.Address {
+		calls := [][]forwarding.Address{}
+		for i := 0; i < fake.DeleteAddressesCallCount(); i++ {
+			addresses := fake.DeleteAddressesArgsForCall(i)
+			if len(addresses) > 0 && addresses[0].Name == ruleName {
+				calls = append(calls, addresses)
+			}
+		}
+		return calls
+	}
 }
